@@ -34,9 +34,8 @@
  *      if returned output < 0
  *          print logging message
  *      End If
- *  else
- *      free memory of kernel from frame    
  *  End If
+ *  free memory of kernel from frame    
  * @endcode
  */
 static void nl_send(struct sk_buff* skb, u64 enc, u8 type, u16 seq)
@@ -49,10 +48,24 @@ static void nl_send(struct sk_buff* skb, u64 enc, u8 type, u16 seq)
     uint64_t ence = (uint64_t)enc;
     uint16_t typee = (uint8_t) type;
     int pidt = getpidt();
-    #ifdef DEBUG_VMAC
-        printk(KERN_INFO "Sending frame to application layer \n");
-    #endif
-    if(pidt != -1)
+    char bwsg = 0;
+    char offset = 0;
+    u8 val;
+    struct ieee80211_rx_status *status = IEEE80211_SKB_RXCB(skb);
+    if (status->bw == RATE_INFO_BW_40)
+    {
+        bwsg |= 2;
+    }        
+    if (status->enc_flags & RX_ENC_FLAG_SHORT_GI)
+    {
+        bwsg |= 1;
+    }
+
+    if (status->encoding & RX_ENC_HT)
+    {
+        offset = 12;
+    }
+    if (pidt != -1)
     {
         skb_out = nlmsg_new(skb->len+115,0); /* extra len for headers and buffer for firmware and driver cross communication */
         if(!skb_out) 
@@ -67,15 +80,18 @@ static void nl_send(struct sk_buff* skb, u64 enc, u8 type, u16 seq)
         {
                 nlh->nlmsg_len = 100;
         }
-    
+        val = status->rate_idx + offset;
         NETLINK_CB(skb_out).dst_group = 0;
         memcpy(&txc.enc[0], &ence, 8);
         memcpy(&txc.seq[0], &seq, 2);
         memcpy(&txc.type, &typee, 1);
+        memcpy(&txc.bwsg, &bwsg, 1);
+        memcpy(&txc.rate_idx, &val, 1);
+        memcpy(&txc.signal, &status->signal, 1);
         memcpy(nlmsg_data(nlh), &txc, sizeof(struct control));
         memcpy(nlmsg_data(nlh) + sizeof(struct control), skb->data, skb->len - 4);
         res = nlmsg_unicast(nl_sk, skb_out, pidt);
-        if(res < 0)
+        if (res < 0)
         {
             #ifdef DEBUG_VMAC
                 printk(KERN_INFO "Failed...\n");
@@ -202,7 +218,7 @@ static void nl_send(struct sk_buff* skb, u64 enc, u8 type, u16 seq)
 void vmac_rx(struct sk_buff* skb)
 {
     u8 type;
-    u16 seq,holes,le,re,i=0,round;
+    u16 seq, holes, le, re, i = 0, round;
     u64 enc;
     struct encoding_tx *vmact;
     struct ieee80211_hdr hdr;
@@ -215,7 +231,7 @@ void vmac_rx(struct sk_buff* skb)
     u8 src[ETH_ALEN] __aligned(2) = {0xfe, 0xfe, 0xfe, 0xfe, 0xfe, 0xfe};
     u8 dest[ETH_ALEN]__aligned(2) = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
     u8 bssid[ETH_ALEN]__aligned(2) = {0xfe, 0xfe, 0xfe, 0xfe, 0xfe, 0xfe};
-    struct vmac_data* vdr;
+    struct vmac_data *vdr;
     struct vmac_hdr *vmachdr = (struct vmac_hdr*)skb->data;
     type = vmachdr->type;
     enc = vmachdr->enc;
@@ -229,16 +245,16 @@ void vmac_rx(struct sk_buff* skb)
         printk(KERN_INFO "Encoding received is: %llu\n", enc);
     #endif
     /* interest */
-    if(type == VMAC_HDR_INTEREST)
+    if (type == VMAC_HDR_INTEREST)
     {
         seq = 0;
     } /* Data */
-    else if(type== VMAC_HDR_DATA)
+    else if (type == VMAC_HDR_DATA)
     {
         vdr = (struct vmac_data*)skb->data;
         seq = vdr->seq;
         vmacr = find_rx(RX_TABLE, enc);
-        if(!vmacr||vmacr==NULL)
+        if (!vmacr || vmacr == NULL)
         {
             #ifdef DEBUG_VMAC
                 printk(KERN_INFO "Does not Exist\n");
@@ -248,46 +264,46 @@ void vmac_rx(struct sk_buff* skb)
         }
         else
         {
-         mod_timer(&vmacr->enc_timeout,jiffies+msecs_to_jiffies(30000));//TWO MINUTE TIMEOUT!!! o_O O_o O_O
+         mod_timer(&vmacr->enc_timeout, jiffies + msecs_to_jiffies(30000));
         }
 
-        if(vmacr->latest<vdr->seq) //uncomment once checked clear
+        if (vmacr->latest < vdr->seq) //uncomment once checked clear
         {
-            while(vmacr->latest<vdr->seq)
+            while(vmacr->latest < vdr->seq)
             {
                 vmacr->latest++;
-                vmacr->window[vmacr->latest>=WINDOW?vmacr->latest%WINDOW:vmacr->latest]=0;
+                vmacr->window[vmacr->latest >= WINDOW ? vmacr->latest % WINDOW : vmacr->latest] = 0;
             }
         }
-        else if(vmacr->window[seq >= WINDOW ? seq %WINDOW : seq] == 1)// unnecessary: &&vdr->seq>=(vmacr->latest>window?vmacr->latest%RX_WINDOW:0)
+        else if (vmacr->window[seq >= WINDOW ? seq %WINDOW : seq] == 1)// unnecessary: &&vdr->seq>=(vmacr->latest>window?vmacr->latest%RX_WINDOW:0)
         {
-            dev_kfree_skb_any(skb);
+            kfree_skb(skb);
             return;
         }
 
-        if(vdr->seq>=(vmacr->latest>=WINDOW?vmacr->latest%WINDOW:0))
+        if (vdr->seq >= (vmacr->latest >= WINDOW ? vmacr->latest % WINDOW : 0))
         {
-            vmacr->window[(seq>=WINDOW?vdr->seq%WINDOW:vdr->seq)]=1;
+            vmacr->window[(seq >= WINDOW ? vdr->seq % WINDOW : vdr->seq)] = 1;
         }
 
-        if(vmacr->firstFrame==0)
+        if (vmacr->firstFrame == 0)
         {
-            vmacr->firstFrame=jiffies;
+            vmacr->firstFrame = jiffies;
         }
-        else if(vmacr->SecondFrame==0)
+        else if (vmacr->SecondFrame == 0)
         {
-            vmacr->SecondFrame=jiffies;
-            vmacr->alpha=(((jiffies-vmacr->firstFrame)/(vdr->seq-vmacr->lastin)));
-            vmacr->firstFrame=0;
+            vmacr->SecondFrame = jiffies;
+            vmacr->alpha = (((jiffies - vmacr->firstFrame) / (vdr->seq - vmacr->lastin)));
+            vmacr->firstFrame = 0;
         }
-        vmacr->lastin=vdr->seq;
-        if(vmacr->round<=vdr->seq-5)
+        vmacr->lastin = vdr->seq;
+        if (vmacr->round <= vdr->seq - 5)
         {
-            vmacr->round=vdr->seq/5;
+            vmacr->round = vdr->seq / 5;
             request_DACK(enc, vmacr->round);
-            vmacr->round=vdr->seq;
+            vmacr->round = vdr->seq;
         } 
-        skb_pull(skb,sizeof(struct vmac_data));
+        skb_pull(skb, sizeof(struct vmac_data));
         #ifdef DEBUG_VMAC
             printk(KERN_INFO "VMAC SEQ: %d", vdr->seq);
         #endif
@@ -297,15 +313,14 @@ void vmac_rx(struct sk_buff* skb)
         #ifdef DEBUG_MO
             printk(KERN_INFO "LOOKING AT DACK\n");
         #endif
-        i=0;
+        i = 0;
         vmacr = find_rx(RX_TABLE, enc);
         vmact = find_tx(TX_TABLE, enc);        
-        vmacr=NULL;
-        ddr=(struct vmac_DACK*)skb->data;
-        holes=ddr->holes;
-        round=ddr->round;
-
-        skb_pull(skb,sizeof(struct vmac_DACK));
+        vmacr = NULL;
+        ddr = (struct vmac_DACK*) skb->data;
+        holes = ddr->holes;
+        round = ddr->round;
+        skb_pull(skb, sizeof(struct vmac_DACK));
         #ifdef DEBUG_MO
             printk(KERN_INFO "Encoding of DACK = %lld", enc);
         #endif
@@ -318,59 +333,45 @@ void vmac_rx(struct sk_buff* skb)
                 printk(KERN_INFO "Encoding of DACK = %lld holes= %d", enc, holes);
             #endif
             vmact->dackcounter++;
-            hole=(struct vmac_hole*)skb->data;
+            hole = (struct vmac_hole*) skb->data;
             while(i < holes && holes != 0)
             {
                 hole = (struct vmac_hole*)skb->data;
-                le=hole->le;
-                re=hole->re;
+                le = hole->le;
+                re = hole->re;
                 i++;
-                #ifdef DEBUG_MO
-                    //printk(KERN_INFO "RceiveD1: LE= %d, RE= %d\n", le,re);
-                #endif 
                 while(le < re && le < seq)
                 {
-                    if(round >= vmact->timer[(le >= WINDOW_TX ? le % WINDOW_TX:le)] && le >= (seq < WINDOW_TX? 0: seq - (WINDOW_TX)))
+                    if (round >= vmact->timer[(le >= WINDOW_TX ? le % WINDOW_TX : le)] && le >= (seq < WINDOW_TX ? 0 : seq - (WINDOW_TX)))
                     {
                         if (maxretx <= counter)
                             break; /* break off or kernel will crash */
-                        //spin_lock(&vmact->seqlock);
-                        #ifdef DEBUG_MO
-                            //printk(KERN_INFO "MO: Trying to copy %d ", le);
-                        #endif
-                        //mutex_lock(&vmact->mt);
                         if (vmact->retransmission_buffer[(le > WINDOW_TX ? le % WINDOW_TX : le)])
                         {
-                            skb2 = skb_copy(vmact->retransmission_buffer[(le>=WINDOW_TX?le%WINDOW_TX:le)], GFP_KERNEL);
+                            skb2 = skb_copy(vmact->retransmission_buffer[(le >= WINDOW_TX ? le % WINDOW_TX : le)], GFP_KERNEL);
                             counter++;
                         }
                         vmact->timer[le % WINDOW_TX] = round + 6;
-                        //mutex_unlock(&vmact->mt);
-                        
-                        //spin_unlock(&vmact->seqlock); 
                         if(skb2)
                         {
-                            retrx(skb2,255);
-                        //    dev_kfree_skb_any(skb2);
+                            retrx(skb2, 255);
                             vmact->framecount++;
                         } 
-                        /* return original to queue */
-
                     }
                     le++;
                 }
-                skb_pull(skb,sizeof(struct vmac_hole)); //dont pull dumbass might be needed at bottom........or...convolute things, probably easier. didn't work, will just make a copy safer....(kinda lazy to do better way lol)
+                skb_pull(skb, sizeof(struct vmac_hole)); //dont pull dumbass might be needed at bottom........or...convolute things, probably easier. didn't work, will just make a copy safer....(kinda lazy to do better way lol)
             }
         }
         if (vmacr && vmacr != NULL)
         {
             if (spin_trylock(&vmacr->dacklok))
             {
-                if (vmacr->dac_info.send==1&&vmacr->dac_info.round==round)
+                if (vmacr->dac_info.send == 1 && vmacr->dac_info.round == round)
                 {
-                    if (vmacr->dac_info.dacksheard>=1)
+                    if (vmacr->dac_info.dacksheard >= 1)
                     {
-                        vmacr->dac_info.send=0;
+                        vmacr->dac_info.send = 0;
                     }
                     else vmacr->dac_info.dacksheard++;
                 }
@@ -392,7 +393,7 @@ void vmac_rx(struct sk_buff* skb)
     } /* Unknown frame type */
     else
     {
-        dev_kfree_skb_any(skb); 
+        kfree_skb(skb); 
         return;
     }
     nl_send(skb, enc, type, seq);
@@ -407,17 +408,17 @@ void vmac_rx(struct sk_buff* skb)
  * Pseudo Code
  * 
  * @code{.unparsed}
- *  if received frame 802.11 header has at fr2 first two bytes value 0xfe //(we assume it is V-MAC)
+ *  if received frame 802.11 header has at first two bytes value 0xfe //(we assume it is V-MAC)
  *      Remove 802.11 header
  *      read V-MAC header
  *      if frame type is interest, data, announcment, or frame injection
- *          call vmac_rx passing frame // i.e. core
+ *          call vmac_rx passing frame  i.e. core
  *      else if frame type is DACK
  *          add frame to management queue
  *      else 
- *          free kernel memory from frame //i.e. not V-MAC frame
+ *          free kernel memory from frame i.e. not V-MAC frame
  *  Else
- *      free kernel memory of frame     //i.e. not V-MAC frame
+ *      free kernel memory of frame     i.e. not V-MAC frame
  *  End If
  * @endcode
  */
@@ -465,7 +466,26 @@ void ieee80211_rx_vmac(struct ieee80211_hw *hw, struct sk_buff *skb)
     }
     else 
     {
-        kfree_skb(skb);
+        #ifdef ENABLE_OVERHEARING
+            #ifdef DEBUG_VMAC
+                if (status->enc_flags & RX_ENC_FLAG_SHORT_GI)
+                {
+                    printk(KERN_INFO "VMAC: Short GI\n");
+                }        
+                if (status->bw == RATE_INFO_BW_40)
+                {
+                    printk(KERN_INFO "VMAC: BW40\n");
+                }
+                if (status->rate_idx != 0)
+                {
+                    printk(KERN_INFO "V-MAC, Rate: %d\n", status->rate_idx);
+                    printk(KERN_INFO "VMAC: signal val: %d\n", -status->signal);
+                }
+            #endif
+            nl_send(skb, 0, V_MAC_OVERHEAR, 0);
+        #else
+            kfree_skb(skb);
+        #endif
     }
 }
 EXPORT_SYMBOL(ieee80211_rx_vmac);
