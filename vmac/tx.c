@@ -9,14 +9,19 @@
 * 
 * You should have received a copy of the license along with this
 * work. If not, see <http://creativecommons.org/licenses/by-nc-sa/4.0/>.
-* 
+*
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+* FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+* IN THE SOFTWARE. 
 */
 #include "vmac.h"
 #include <linux/rhashtable.h>
-struct ieee80211_tx_control ctr={};
-//#define NFD_VNLP
-u32 firsttt, lasttt;    
-    int big3counter = 0;
+struct ieee80211_tx_control ctr = {};
+
 /**
  * @brief    Vmac core tx handles sending all kinds of frames and processing
  * them properly.
@@ -33,7 +38,7 @@ u32 firsttt, lasttt;
  *  if type of frame is interest
  *      look up tx table for the same encoding
  *      if entry does not exist
- *          vmalloc entry (virtual memory)
+ *          allocate struct entry (virtual memory)
  *          init variables
  *          set key to encoding
  *          setup encoding timeout
@@ -101,7 +106,7 @@ void vmac_tx(struct sk_buff* skb, u64 enc, u8 type, u8 tmprate, u16 seqtmp)
     #endif
     if (type == VMAC_HDR_INTEREST)
     {
-        vmacr = find_rx(RX_TABLE, enc);        
+        vmacr = find_rx(RX_TABLE, enc);
         #ifdef DEBUG_VMAC
             printk(KERN_INFO "VMACTX: TEST");
         #endif
@@ -135,9 +140,9 @@ void vmac_tx(struct sk_buff* skb, u64 enc, u8 type, u8 tmprate, u16 seqtmp)
             add_rx(vmacr);
 
             #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,18,0)
-                timer_setup(&vmacr->dack_timer, __sendDACK,0);
+                timer_setup(&vmacr->dack_timer, __sendDACK, 0);
                 #ifdef DEBUG_VMAC
-                    printk(KERN_INFO"CALLING MOD TIMER %u\n", vmacr->key);
+                    printk(KERN_INFO "CALLING MOD TIMER %u\n", vmacr->key);
                 #endif
                 timer_setup(&vmacr->enc_timeout, __cleanup_rx, 0);
             #else
@@ -148,9 +153,9 @@ void vmac_tx(struct sk_buff* skb, u64 enc, u8 type, u8 tmprate, u16 seqtmp)
         }
         vmachdr.type = VMAC_HDR_INTEREST;
         mod_timer(&vmacr->enc_timeout, jiffies + msecs_to_jiffies(30000)); /* FIXME: Needs to be defaulted from vmac.h or userspace */
-        memcpy(skb_push(skb,sizeof(struct vmac_hdr)),&vmachdr,sizeof(struct vmac_hdr));
+        memcpy(skb_push(skb, sizeof(struct vmac_hdr)), &vmachdr, sizeof(struct vmac_hdr));
     }//Data
-    else if(type==VMAC_HDR_DATA)
+    else if(type == VMAC_HDR_DATA)
     {
         #ifdef DEBUG_VMAC
             printk(KERN_INFO "VMACTX: TEST2");
@@ -158,22 +163,22 @@ void vmac_tx(struct sk_buff* skb, u64 enc, u8 type, u8 tmprate, u16 seqtmp)
         vmact = find_tx(TX_TABLE, enc);
         if (!vmact || vmact == NULL)
         {
-            vmact=vmalloc(sizeof(struct encoding_tx));
-            clean=&vmact->clean;
-            clean->enc=enc;
-            clean->type=CLEAN_ENC_TX;
+            vmact = vmalloc(sizeof(struct encoding_tx));
+            clean = &vmact->clean;
+            clean->enc = enc;
+            clean->type = CLEAN_ENC_TX;
             /* init */
             spin_lock_init(&vmact->seqlock);
-            vmact->framecount=0;
-            vmact->seq=0;
-            vmact->key=enc;
-            vmact->dackcounter=0;
-            vmact->prevround=0;
-            vmact->prevtime=0;
+            vmact->framecount = 0;
+            vmact->seq = 0;
+            vmact->key = enc;
+            vmact->dackcounter = 0;
+            vmact->prevround = 0;
+            vmact->prevtime = 0;
             #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,18,0)
                 timer_setup(&vmact->enc_timeout, __cleanup_tx, 0);
             #else
-                setup_timer(&vmact->enc_timeout,__cleanup,(unsigned long) clean);
+                setup_timer(&vmact->enc_timeout, __cleanup, (unsigned long) clean);
             #endif
             vmact->round_inc[0] = 0;
             vmact->round_inc[1] = 0;
@@ -183,7 +188,7 @@ void vmac_tx(struct sk_buff* skb, u64 enc, u8 type, u8 tmprate, u16 seqtmp)
             vmact->round_dec[2] = 0;
             add_tx(vmact);
         }
-        mod_timer(&vmact->enc_timeout,jiffies+msecs_to_jiffies(30000));/* FIXME: Needs to be defaulted from vmac.h or userspace */       
+        mod_timer(&vmact->enc_timeout, jiffies + msecs_to_jiffies(30000));/* FIXME: Needs to be defaulted from vmac.h or userspace */       
         vmachdr.type = VMAC_HDR_DATA;
         spin_lock(&vmact->seqlock);
         ddr.seq = vmact->seq++;
@@ -219,7 +224,7 @@ void vmac_tx(struct sk_buff* skb, u64 enc, u8 type, u8 tmprate, u16 seqtmp)
         #endif
         hdr.duration_id = 0;
         memcpy(skb_push(skb, sizeof(struct vmac_hdr)), &vmachdr, sizeof(struct vmac_hdr));
-        rate=0;
+        rate = 0;
     }
     else if (type == VMAC_HDR_INJECTED)
     {
@@ -281,4 +286,3 @@ void vmac_low_tx(struct sk_buff* skb, u8 rate)
     skb->priority = 256 + 5;
     local->ops->tx(&local->hw, &ctr, skb);
 }
-

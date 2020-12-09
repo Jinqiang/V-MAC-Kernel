@@ -9,25 +9,31 @@
 * 
 * You should have received a copy of the license along with this
 * work. If not, see <http://creativecommons.org/licenses/by-nc-sa/4.0/>.
-*  
-* NOTE: WIP, not being used.
+*
+* 
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+* FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+* IN THE SOFTWARE.
 */
 #include "vmac.h"
 
 struct rate_decision global;
 spinlock_t ratelok;
-u8 mainrate = 0;
+u8 mainrate=0;
 int ratebusy;
-
 /**
  * @brief    Initialize frame rate adaptation struct.
  */
 void rate_init(void)
 {
-    global.rate_idx[0] = 2;
-    global.rate_idx[1] = 3;
-    global.rate_idx[2] = 11;
-    global.rate = 0;
+    global.rate_idx[0]=2;
+    global.rate_idx[1]=3;
+    global.rate_idx[2]=11;
+    global.rate=0;
     ratebusy=0;
     mainrate=0;
     spin_lock_init(&ratelok);

@@ -9,7 +9,6 @@
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
  * 
- * this garbage needs to be simplified at some point......
  */
 
 #ifndef IEEE80211_I_H

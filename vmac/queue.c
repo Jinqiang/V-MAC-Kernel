@@ -10,6 +10,13 @@
 * You should have received a copy of the license along with this
 * work. If not, see <http://creativecommons.org/licenses/by-nc-sa/4.0/>.
 * 
+* THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+* FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+* IN THE SOFTWARE.
 */
 #include "vmac.h"
 #include <linux/rhashtable.h>
@@ -23,8 +30,8 @@ struct vmac_queues_status questatus;
   * @brief    Starts 2 queue threads
   * - queuethread: handles passing management frames from core to hardware and
   *   non-management frames to hardware in that order (i.e. handles 2 queues).
-  *   - rqueuethread: handles passing received management frames from
-  *     low-drivers to V-MAC core for processing
+  * - rqueuethread: handles passing received management frames from
+  *   low-drivers to V-MAC core for processing
   */ 
 void queue_start(void)
 {
@@ -157,8 +164,7 @@ void retrx(struct sk_buff* skb, u8 rate)
  */
 void add_DACK(struct sk_buff *skb)
 {
-    struct vmac_queue *entry;
-    entry = (struct vmac_queue*) kmalloc(sizeof(struct vmac_queue), GFP_KERNEL);
+    struct vmac_queue *entry = (struct vmac_queue*) kmalloc(sizeof(struct vmac_queue), GFP_KERNEL);
     if (entry)
     {
         entry->frame = skb;
